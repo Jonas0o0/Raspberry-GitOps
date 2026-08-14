@@ -1,0 +1,8 @@
+---
+- name: "Déploiement de la Douane Gateway"
+  hosts: raspberry
+  
+  become: true 
+  
+  roles:
+    - douane_gateway

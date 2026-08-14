@@ -1,0 +1,68 @@
+version: "3.8"
+
+networks:
+  gateway_net:
+    name: gateway_net
+
+volumes:
+  netbird-db-data:
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN={{ vault_cf_token }}
+    networks:
+      - gateway_net
+    restart: unless-stopped
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - gateway_net
+    restart: unless-stopped
+
+  netbird-management:
+    image: netbirdio/management:latest
+    container_name: netbird-management
+    depends_on:
+      - netbird-db
+    environment:
+      # On injecte les mots de passe depuis Ansible Vault
+      - NETBIRD_STORE_ENGINE=postgres
+      - NETBIRD_STORE_ENDPOINT=postgres://netbird:{{ vault_netbird_db_password }}@netbird-db:5432/netbird?sslmode=disable
+      - NETBIRD_SETUP_KEY={{ vault_netbird_setup_key }}
+    volumes:
+      - "/opt/netbird/management:/var/lib/netbird"
+    networks:
+      - gateway_net
+    labels:
+      - "traefik.enable=true"
+      # Traefik écoute le sous-domaine défini dans vars.yml
+      - "traefik.http.routers.netbird.rule=Host(`{{ sub_netbird }}`)"
+      - "traefik.http.services.netbird.loadbalancer.server.port=33073"
+    restart: unless-stopped
+
+  netbird-db:
+    image: postgres:15-alpine
+    container_name: netbird-db
+    environment:
+      - POSTGRES_USER=netbird
+      - POSTGRES_PASSWORD={{ vault_netbird_db_password }}
+      - POSTGRES_DB=netbird
+    volumes:
+      - netbird-db-data:/var/lib/postgresql/data
+    networks:
+      - gateway_net
+    restart: unless-stopped

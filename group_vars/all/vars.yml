@@ -1,0 +1,4 @@
+domaine_principal: "jonas-facon.dev"
+
+sub_netbird: "netbird.{{ domaine_principal }}"
+sub_auth: "auth.{{ domaine_principal }}"
